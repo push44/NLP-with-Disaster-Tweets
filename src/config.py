@@ -8,3 +8,6 @@ DEV_TEST_FILE = "../input/dev_test.csv"
 MODEL_PATH = "../models"
 
 N_FOLDS = 5
+
+MODEL_NAME = "logistic_reg"
+VEC_NAME = "tfidf_vec"

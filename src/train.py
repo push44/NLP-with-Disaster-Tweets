@@ -1,39 +1,22 @@
 import pandas as pd
 import config
 import model_dispatcher
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from nltk.tokenize import word_tokenize
 from sklearn import metrics
 import pickle
 
-def count_vectorizer(text, save=False):
-    vectorizer = CountVectorizer(
-        tokenizer=word_tokenize,
-        token_pattern=None,
-        max_features=1000,
-        max_df=0.9,
-        min_df=0.05
-    )
+
+def vectorizer_func(text, vec_name, save=False):
+    vectorizer = model_dispatcher.models[vec_name]
     vectorizer.fit(text)
 
     if save==True:
-        with open(f"{config.MODEL_PATH}/count_vec.pickle", "wb") as f:
-            pickle.dump(vectorizer, f)
-
-    return vectorizer
-
-def tfidf_vectorizer(text, save=False):
-    vectorizer = TfidfVectorizer()
-    vectorizer.fit(text)
-
-    if save==True:
-        with open(f"{config.MODEL_PATH}/tfidf_vec.pickle", "wb") as f:
+        with open(f"{config.MODEL_PATH}/{vec_name}.pickle", "wb") as f:
             pickle.dump(vectorizer, f)
 
     return vectorizer
 
 
-def train_cv(df, model_name, vectorization_func):
+def train_cv(df, model_name, vec_name):
 
     for fold in range(config.N_FOLDS):
         df_train = df[df["kfold"] != fold]
@@ -42,7 +25,7 @@ def train_cv(df, model_name, vectorization_func):
         X_train, y_train = df_train["text"], df_train["target"]
         X_valid, y_valid = df_valid["text"], df_valid["target"]
         
-        vectorizer = vectorization_func(X_train)
+        vectorizer = vectorizer_func(text=X_train, vec_name=vec_name)
         X_train = vectorizer.transform(X_train)
         X_valid = vectorizer.transform(X_valid)
 
@@ -52,14 +35,15 @@ def train_cv(df, model_name, vectorization_func):
 
         for x,y,n in zip([X_train, X_valid], [y_train, y_valid], ["train", "valid"]):
             preds = model.predict(x)
-            acc = metrics.accuracy_score(y, preds)
-            print(f"Fold {fold} {n} accuracy: {acc}")
+            acc = metrics.f1_score(y, preds)
+            print(f"Fold {fold} {n} F1 Score: {acc}")
         print("\n")
 
-def train(df, model_name, vectorization_func):
+
+def train(df, model_name, vec_name):
     X, y = df["text"], df["target"]
 
-    vectorizer = vectorization_func(X, save=True)
+    vectorizer = vectorizer_func(text=X, vec_name=vec_name, save=True)
     X = vectorizer.transform(X)
 
     model = model_dispatcher.models[model_name]
@@ -73,7 +57,6 @@ def train(df, model_name, vectorization_func):
 
 if __name__ == "__main__":
     df = pd.read_csv(config.DEV_TRAIN_FILE)
-    model_name = "logistic_reg"
 
-    train_cv(df, model_name, tfidf_vectorizer)
-    #train(df, model_name, tfidf_vectorizer)
+    train_cv(df, config.MODEL_NAME, config.VEC_NAME)
+    train(df, config.MODEL_NAME, config.VEC_NAME)

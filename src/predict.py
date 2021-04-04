@@ -8,15 +8,14 @@ if __name__ == "__main__":
 
     X = df["text"].values
 
-    model_name = "naive_bayes"
-
-    with open(f"{config.MODEL_PATH}/tfidf_vec.pickle", "rb") as f:
+    with open(f"{config.MODEL_PATH}/{config.VEC_NAME}.pickle", "rb") as f:
         vectorizer = pickle.load(f)
 
-    with open(f"{config.MODEL_PATH}/{model_name}.pickle", "rb") as f:
+    with open(f"{config.MODEL_PATH}/{config.MODEL_NAME}.pickle", "rb") as f:
         model = pickle.load(f)
 
     X = vectorizer.transform(X)
 
     preds = model.predict(X)
     submission_df["target"] = preds
+    submission_df.to_csv(config.ARCHIVE_SUBMISSION_FILE, index=False)
