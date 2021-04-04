@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import config
 import model_dispatcher
 from sklearn import metrics
@@ -33,11 +34,15 @@ def train_cv(df, model_name, vec_name):
 
         model.fit(X_train, y_train)
 
-        for x,y,n in zip([X_train, X_valid], [y_train, y_valid], ["train", "valid"]):
+        avg_val_score = []
+        for x,y in zip([X_train, X_valid], [y_train, y_valid]):
             preds = model.predict(x)
-            acc = metrics.f1_score(y, preds)
-            print(f"Fold {fold} {n} F1 Score: {acc}")
-        print("\n")
+            score = metrics.f1_score(y, preds)
+            avg_val_score.append(score)
+            #print(f"Fold {fold} Score: {score}")
+        #print("\n")
+
+    print(f"Average Validation Score: {np.average(avg_val_score)}")
 
 
 def train(df, model_name, vec_name):
