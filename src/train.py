@@ -17,18 +17,22 @@ def vectorizer_func(text, vec_name, save=False):
     return vectorizer
 
 
-def train_cv(df, model_name, vec_name):
+def train_cv(df, model_name, vec_name=None):
 
     for fold in range(config.N_FOLDS):
         df_train = df[df["kfold"] != fold]
         df_valid = df[df["kfold"] == fold]
 
-        X_train, y_train = df_train["text"], df_train["target"]
-        X_valid, y_valid = df_valid["text"], df_valid["target"]
-        
-        vectorizer = vectorizer_func(text=X_train, vec_name=vec_name)
-        X_train = vectorizer.transform(X_train)
-        X_valid = vectorizer.transform(X_valid)
+        y_train = df_train["target"].values
+        X_train = df_train.drop(["target", "kfold"], axis=1).values
+
+        y_valid = df_valid["target"].values
+        X_valid = df_valid.drop(["target", "kfold"], axis=1).values
+
+        if vec_name!=None:        
+            vectorizer = vectorizer_func(text=X_train, vec_name=vec_name)
+            X_train = vectorizer.transform(X_train)
+            X_valid = vectorizer.transform(X_valid)
 
         model = model_dispatcher.models[model_name]
 
@@ -45,11 +49,13 @@ def train_cv(df, model_name, vec_name):
     print(f"Average Validation Score: {np.average(avg_val_score)}")
 
 
-def train(df, model_name, vec_name):
-    X, y = df["text"], df["target"]
+def train(df, model_name, vec_name=None):
+    y = df["target"].values
+    X = df.drop(["target", "kfold"], axis=1).values
 
-    vectorizer = vectorizer_func(text=X, vec_name=vec_name, save=True)
-    X = vectorizer.transform(X)
+    if vec_name!=None:
+        vectorizer = vectorizer_func(text=X, vec_name=vec_name, save=True)
+        X = vectorizer.transform(X)
 
     model = model_dispatcher.models[model_name]
     model.fit(X, y)
@@ -59,9 +65,10 @@ def train(df, model_name, vec_name):
         pickle.dump(model, f)
 
 
-
 if __name__ == "__main__":
     df = pd.read_csv(config.DEV_TRAIN_FILE)
 
-    train_cv(df, config.MODEL_NAME, config.VEC_NAME)
-    train(df, config.MODEL_NAME, config.VEC_NAME)
+    #train_cv(df, config.MODEL_NAME, config.VEC_NAME)
+    train_cv(df, config.MODEL_NAME)
+    #train(df, config.MODEL_NAME, config.VEC_NAME)
+    train(df, config.MODEL_NAME)
