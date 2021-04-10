@@ -1,74 +1,119 @@
 import pandas as pd
-import numpy as np
-import config
-import model_dispatcher
 from sklearn import metrics
-import pickle
+import torch
+import numpy as np
+
+import config
+import dataset
+import neural_net
+import engine
+
+def run_cv(df, fold):
+    train_df = df[df["kfold"] != fold].reset_index(drop=True)
+    valid_df = df[df["kfold"] == fold].reset_index(drop=True)
+
+    #y_train = pd.get_dummies(train_df["target"], dtype="int64").values
+    y_train = train_df["target"].values
+    X_train = train_df.drop(["target", "kfold"], axis=1).values
+    
+    #y_valid = pd.get_dummies(valid_df["target"], dtype="int64").values
+    y_valid = valid_df["target"].values
+    X_valid = valid_df.drop(["target", "kfold"], axis=1).values
+
+    train_dataset = dataset.TweetDataset(
+        tweets=X_train,
+        targets=y_train
+    )
+
+    valid_dataset = dataset.TweetDataset(
+        tweets=X_valid,
+        targets=y_valid
+    )
+
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=config.TRAIN_BATCH_SIZE,
+        num_workers=2
+    )
+
+    valid_dataloader = torch.utils.data.DataLoader(
+        valid_dataset,
+        batch_size=config.TRAIN_BATCH_SIZE,
+        num_workers=1
+    )
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Using {} device".format(device))
+
+    model = neural_net.NeuralNetwork().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    loss_fn = torch.nn.BCELoss()
+
+    print("Training Model...")
+    
+    #early_stopping_counter = 0
+
+    for epoch in range(config.EPOCHS):
+        print(f"Epoch {epoch+1}\n--------------------")
+        engine.train(
+            train_dataloader,
+            model,
+            optimizer,
+            loss_fn,
+            device
+        )
+
+        outputs, targets = engine.evaluate(
+            valid_dataloader,
+            model,
+            loss_fn,
+            device
+        )
+        outputs = np.array(outputs).reshape(-1,)
+        outputs = list(map(lambda pred: 1 if pred>0.5 else 0, outputs))
+        valid_score = metrics.f1_score(targets, outputs)
+        print(f" F1 Score: {valid_score}\n")
 
 
-def vectorizer_func(text, vec_name, save=False):
-    vectorizer = model_dispatcher.models[vec_name]
-    vectorizer.fit(text)
-
-    if save==True:
-        with open(f"{config.MODEL_PATH}/{vec_name}.pickle", "wb") as f:
-            pickle.dump(vectorizer, f)
-
-    return vectorizer
-
-
-def train_cv(df, model_name, vec_name=None):
-
-    for fold in range(config.N_FOLDS):
-        df_train = df[df["kfold"] != fold]
-        df_valid = df[df["kfold"] == fold]
-
-        y_train = df_train["target"].values
-        X_train = df_train.drop(["target", "kfold"], axis=1).values
-
-        y_valid = df_valid["target"].values
-        X_valid = df_valid.drop(["target", "kfold"], axis=1).values
-
-        if vec_name!=None:        
-            vectorizer = vectorizer_func(text=X_train, vec_name=vec_name)
-            X_train = vectorizer.transform(X_train)
-            X_valid = vectorizer.transform(X_valid)
-
-        model = model_dispatcher.models[model_name]
-
-        model.fit(X_train, y_train)
-
-        avg_val_score = []
-        for x,y in zip([X_train, X_valid], [y_train, y_valid]):
-            preds = model.predict(x)
-            score = metrics.f1_score(y, preds)
-            avg_val_score.append(score)
-            #print(f"Fold {fold} Score: {score}")
-        #print("\n")
-
-    print(f"Average Validation Score: {np.average(avg_val_score)}")
-
-
-def train(df, model_name, vec_name=None):
+def run(df):
     y = df["target"].values
     X = df.drop(["target", "kfold"], axis=1).values
 
-    if vec_name!=None:
-        vectorizer = vectorizer_func(text=X, vec_name=vec_name, save=True)
-        X = vectorizer.transform(X)
+    train_dataset = dataset.TweetDataset(
+        tweets=X,
+        targets=y
+    )
 
-    model = model_dispatcher.models[model_name]
-    model.fit(X, y)
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=config.TRAIN_BATCH_SIZE,
+        num_workers=2
+    )
 
-    # Save the model
-    with open(f"{config.MODEL_PATH}/{model_name}.pickle", "wb") as f:
-        pickle.dump(model, f)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Using {} device".format(device))
+
+    model = neural_net.NeuralNetwork().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    loss_fn = torch.nn.BCELoss()
+
+    print("Training Model...")
+
+    for epoch in range(config.EPOCHS):
+        print(f"Epoch {epoch+1}\n--------------------")
+        engine.train(
+            train_dataloader,
+            model,
+            optimizer,
+            loss_fn,
+            device
+        )
+
+    torch.save(model.state_dict(), f"{config.MODEL_PATH}/{config.MODEL_NAME}.pth")
 
 
 if __name__ == "__main__":
     df = pd.read_csv(config.DEV_TRAIN_FILE)
 
-    #train_cv(df, config.MODEL_NAME, config.VEC_NAME)
-    train_cv(df, config.MODEL_NAME)
-    #train(df, config.MODEL_NAME, config.VEC_NAME)
-    train(df, config.MODEL_NAME)
+    #run_cv(df, 0)
+    run(df)

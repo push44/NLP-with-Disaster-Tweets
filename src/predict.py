@@ -1,23 +1,27 @@
 import pandas as pd
+import numpy as np
 import config
-import pickle
+import torch
+
+import neural_net
 
 if __name__ == "__main__":
     df = pd.read_csv(config.DEV_TEST_FILE)
     submission_df = pd.read_csv(config.ARCHIVE_SUBMISSION_FILE)
 
-    X = df.values
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print("Using {} device".format(device))
 
-    vectorization = False
-    if vectorization:
-        with open(f"{config.MODEL_PATH}/{config.VEC_NAME}.pickle", "rb") as f:
-            vectorizer = pickle.load(f)
+    model = neural_net.NeuralNetwork().to(device)
+    model.load_state_dict(torch.load(f"{config.MODEL_PATH}/{config.MODEL_NAME}.pth"))
+    model.eval()
 
-        X = vectorizer.transform(X)
+    X = torch.tensor(df.values)
+    X = X.to(device, dtype=torch.float)
+    predictions = model(X)
 
-    with open(f"{config.MODEL_PATH}/{config.MODEL_NAME}.pickle", "rb") as f:
-        model = pickle.load(f)
+    predictions = predictions.reshape(-1,)
+    predictions = list(map(lambda pred: 1 if pred>0.5 else 0, predictions))
 
-    preds = model.predict(X)
-    submission_df["target"] = preds
+    submission_df["target"] = predictions
     submission_df.to_csv(config.ARCHIVE_SUBMISSION_FILE, index=False)
